@@ -1,0 +1,9 @@
+﻿  compilation header save succeeded; see E:\Programming\Projects\Virtual-Screen-Extender\WindowsCompanionApp\x64\Debug\PixelShader.h
+  compilation header save succeeded; see E:\Programming\Projects\Virtual-Screen-Extender\WindowsCompanionApp\x64\Debug\VertexShader.h
+  DesktopDuplication.cpp
+  DisplayManager.cpp
+  DuplicationManager.cpp
+  OutputManager.cpp
+  ThreadManager.cpp
+  Generating Code...
+  DesktopDuplication.vcxproj -> E:\Programming\Projects\Virtual-Screen-Extender\WindowsCompanionApp\x64\Debug\DesktopDuplication.exe
