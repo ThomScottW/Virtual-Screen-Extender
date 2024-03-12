@@ -1,9 +1,7 @@
-// THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
-// ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED TO
-// THE IMPLIED WARRANTIES OF MERCHANTABILITY AND/OR FITNESS FOR A
-// PARTICULAR PURPOSE.
-//
-// Copyright (c) Microsoft Corporation. All rights reserved
+// Entry point for the Virtual Screen Extender (VSE) windows companion app. This app duplicates desktops and sends
+// them via WiFi. This is heavily based off of the DXGI Desktop Duplication sample code by Microsoft, which can be
+// found at https://github.com/microsoftarchive/msdn-code-gallery-microsoft/tree/master/Official%20Windows%20Platform%20Sample/DXGI%20desktop%20duplication%20sample
+// with documentation at https://learn.microsoft.com/en-us/windows/win32/direct3ddxgi/desktop-dup-api
 
 #include <limits.h>
 
