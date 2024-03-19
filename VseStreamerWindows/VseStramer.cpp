@@ -15,7 +15,8 @@ LRESULT CALLBACK WindowProcedure(
 );
 
 
-int WINAPI WinMain(_In_ HINSTANCE hInstance, 
+int WINAPI WinMain(
+	_In_ HINSTANCE hInstance, 
 	_In_opt_ HINSTANCE hPrevInstance,
 	_In_ LPSTR,
 	_In_ int nCmdShow
@@ -23,7 +24,7 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance,
 	// Create and register window class for this application
 	WNDCLASSEX WindowClassEx;
 	static TCHAR szWindowClass[] = _T("DesktopApp");
-	static TCHAR szTitle[] = _T("Windows Desktop Guided Tour Application");
+	static TCHAR szTitle[] = _T("VSE Streamer");
 
 	WindowClassEx.cbSize = sizeof(WNDCLASSEX);
 	WindowClassEx.style = CS_HREDRAW | CS_VREDRAW;
@@ -41,21 +42,23 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance,
 	if (!RegisterClassEx(&WindowClassEx)) {
 		MessageBox(
 			NULL, 
-			_T("Call to RegisterClassEx failed!"), 
-			_T("Windows Desktop Guided Tour"),
+			_T("Failed to register window class!"),	// Popup message
+			_T("VSE Streamer App Error"),			// Title of popup window
 			NULL
 		);
 		return 1;
 	}
 
 	// Create a window using the window class we just created and registered
+	int windowHeight = 300;
+	int windowWidth = 300;
 	HWND windowHandle = CreateWindowEx(
 		WS_EX_OVERLAPPEDWINDOW, 
 		szWindowClass,
 		szTitle, 
 		WS_OVERLAPPEDWINDOW, 
 		CW_USEDEFAULT, CW_USEDEFAULT, 
-		500, 100, 
+		windowWidth, windowHeight, 
 		NULL, 
 		NULL, 
 		hInstance, 
@@ -64,8 +67,8 @@ int WINAPI WinMain(_In_ HINSTANCE hInstance,
 	if (!windowHandle) {
 		MessageBox(
 			NULL,
-			_T("Call to CreateWindowEx failed!"),
-			_T("Windows Desktop Guided Tour"),
+			_T("Failed to instantiate window!"),
+			_T("VSE Streamer App Error"),
 			NULL
 		);
 		return 1;
@@ -91,12 +94,12 @@ LRESULT CALLBACK WindowProcedure(
 ) {
 	PAINTSTRUCT ps;
 	HDC deviceContextHandle;
-	TCHAR greeting[] = _T("Hello, Windows desktop!)");
+	TCHAR greeting[] = _T("Virtual Streamer Interface");
 
 	switch (message) {
 	case WM_PAINT:
 		deviceContextHandle = BeginPaint(hWnd, &ps);
-		TextOut(deviceContextHandle, 5, 5, greeting, _tcslen(greeting));
+		TextOut(deviceContextHandle, 5, 50, greeting, _tcslen(greeting));
 		EndPaint(hWnd, &ps);
 		break;
 	case WM_DESTROY:
