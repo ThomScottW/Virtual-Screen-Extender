@@ -1,0 +1,3 @@
+﻿  VseStramer.cpp
+E:\Programming\Projects\Virtual-Screen-Extender\VseStreamerWindows\VseStramer.cpp(99,55): warning C4267: 'argument': conversion from 'size_t' to 'int', possible loss of data
+  VseStreamerWindows.vcxproj -> E:\Programming\Projects\Virtual-Screen-Extender\VseStreamerWindows\x64\Debug\VseStreamerWindows.exe
