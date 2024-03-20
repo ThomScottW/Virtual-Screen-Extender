@@ -1,6 +1,7 @@
 #include <Windows.h>
 #include <tchar.h>
 #include <dxgi1_2.h>
+#include <stdio.h>
 
 
 // Forward declaration of the Window Procedure

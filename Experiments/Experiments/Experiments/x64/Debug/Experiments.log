@@ -1,0 +1,4 @@
+﻿  Experiments.cpp
+E:\Programming\Projects\Virtual-Screen-Extender\Experiments\Experiments\Experiments.cpp(102,1): warning C4715: 'printAdapterInfo': not all control paths return a value
+E:\Programming\Projects\Virtual-Screen-Extender\Experiments\Experiments\Experiments.cpp(142,1): warning C4715: 'createAdapterExperiment': not all control paths return a value
+  Experiments.vcxproj -> E:\Programming\Projects\Virtual-Screen-Extender\Experiments\Experiments\x64\Debug\Experiments.exe
