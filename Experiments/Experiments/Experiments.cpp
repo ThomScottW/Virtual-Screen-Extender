@@ -337,13 +337,14 @@ int outputDuplicationExperiment() {
     ID3D11Texture2D* pAcquiredDesktopImage = nullptr;
     DXGI_OUTDUPL_FRAME_INFO FrameInfo;
     do {
+        // Normally wouldn't call ReleaseFrame, but it's necessary
+        // for the timeout to work. With a timeout of 0, there is an invalid
+        // call to ReleaseFrame for every blank frame until a frame with
+        // data is returned.
         pOutputDuplication->ReleaseFrame();
-        // The first argument is the timeout interval to wait for a frame
-        // to be ready. If it's 0, then the function will return immediately, but first
-        // if statement handles this case but just continuing to loop.
-        hr = pOutputDuplication->AcquireNextFrame(0, &FrameInfo, &pDesktopResource);
+        hr = pOutputDuplication->AcquireNextFrame(50, &FrameInfo, &pDesktopResource);
         if (hr == DXGI_ERROR_WAIT_TIMEOUT) {
-            std::cout << "Timeout elapsed without acquiring a frame. Not necessarily an error.";
+            std::cout << "Timeout elapsed without acquiring a frame. Not necessarily an error." << std::endl;
         }
         else if (hr == DXGI_ERROR_INVALID_CALL) {
             std::cout << "Release previous frame before re-calling AcquireNextFrame" << std::endl;
@@ -356,6 +357,7 @@ int outputDuplicationExperiment() {
         
     } while (!DUPL_FRAME_READY(FrameInfo));
     std::cout << "Frame Duplication Success!" << std::endl;
+
 
     // The AcquireNextFrame function gave us two things: 1) a Frame Data struct, which
     // is only useful for the pointer position and 2) an IDXGIResource*. The latter
