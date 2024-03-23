@@ -9,6 +9,7 @@
 // Explore the output of IDXGIOutputDuplication::GetFrameDirtyRects
 // Explore the output of IDXGIOutputDuplication::GetFrameMoveRects
 
+#include <chrono>
 // Necessary includes for basic desktop duplication API
 #pragma comment(lib, "dxgi")
 #pragma comment(lib, "d3d11")
@@ -16,7 +17,8 @@
 #include <dxgi1_2.h>
 #include <d3d11_2.h>
 // Include for saving an ID3D11Texture2D to a png on desktop
-#include <DirectXTex.h>
+#include <wincodec.h>
+#include <directxtk/ScreenGrab.h>
 
 // EnumAdapters1 needs an Adapter index as input (if you have a single
 // graphics card, the only valid index will be 0), and you pass it a 
@@ -157,6 +159,7 @@ int createAdapterExperiment() {
     // Cleanup pNewAdapter
     pNewAdapter->Release();
     pNewAdapter = nullptr;
+    return 0;
 }
 
 // Some helper functions to neatly print some information about DirectX interfaces
@@ -168,14 +171,13 @@ void printReferenceCountAndPointer(IUnknown* DXDIObject) {
 }
 
 void printID3D11Texture2DDescription(ID3D11Texture2D* texture) {
-    HRESULT hr;
-    D3D11_TEXTURE2D_DESC* pTextureDescription = nullptr;
-    texture->GetDesc(pTextureDescription);
+    D3D11_TEXTURE2D_DESC pTextureDescription;
+    texture->GetDesc(&pTextureDescription);
     std::cout << "*****ID3D11Texture2D Information*****" << std::endl;
-    std::cout << "Width: " << pTextureDescription->Width << std::endl;
-    std::cout << "Height: " << pTextureDescription->Height << std::endl;
-    std::cout << "Array size: " << pTextureDescription->ArraySize << std::endl;
-    std::cout << "Format : " << pTextureDescription->Format << std::endl;
+    std::cout << "Width: " << pTextureDescription.Width << std::endl;
+    std::cout << "Height: " << pTextureDescription.Height << std::endl;
+    std::cout << "Array size: " << pTextureDescription.ArraySize << std::endl;
+    std::cout << "Format : " << pTextureDescription.Format << std::endl;
 }
 
 void printDuplicationFrameInfo(const DXGI_OUTDUPL_FRAME_INFO frameInfo) {
@@ -187,65 +189,42 @@ void printDuplicationFrameInfo(const DXGI_OUTDUPL_FRAME_INFO frameInfo) {
     std::cout << "Cursor visible?: " << frameInfo.PointerPosition.Visible << std::endl;
 }
 
-int saveID3D11Texture2DasPNG(ID3D11Texture2D* texture2D) {
-    if (!texture2D) {
-        return 1;
-    }
-
+HRESULT saveTextureToPNG(ID3D11Texture2D* pTexture, const wchar_t* filePath)
+{
+    if (!pTexture || !filePath)
+        return E_INVALIDARG;  
     HRESULT hr;
+
+    // Retrieve the device context
     ID3D11Device* pDevice = nullptr;
     ID3D11DeviceContext* pContext = nullptr;
-    texture2D->GetDevice(&pDevice);
-    pDevice->GetImmediateContext(&pContext);
-
-    // Get the description of the texture
-    D3D11_TEXTURE2D_DESC desc;
-    texture2D->GetDesc(&desc);
-
-    // Create a staging texture with the same dimensions and format
-    desc.BindFlags = 0;
-    desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ | D3D11_CPU_ACCESS_WRITE;
-    desc.Usage = D3D11_USAGE_STAGING;
-    desc.MiscFlags = 0;
-    desc.MipLevels = 1;
-    desc.ArraySize = 1;
-
-    ID3D11Texture2D* stagingTexture = nullptr;
-    hr = pDevice->CreateTexture2D(&desc, nullptr, &stagingTexture);
-    if (FAILED(hr)) {
-        pContext->Release();
-        pDevice->Release();
-        return 1;
+    pTexture->GetDevice(&pDevice);
+    if (pDevice)
+    {
+        pDevice->GetImmediateContext(&pContext);
     }
 
-    // Copy the texture to the staging texture
-    pContext->CopyResource(stagingTexture, texture2D);
-
-    // Use DirectXTex to save the texture
-    DirectX::ScratchImage scratchImage;
-    hr = DirectX::CaptureTexture(pDevice, pContext, stagingTexture, scratchImage);
-    if (FAILED(hr)) {
-        stagingTexture->Release();
-        pContext->Release();
-        pDevice->Release();
-        return 1;
+    if (!pContext)
+    {
+        if (pDevice) pDevice->Release();
+        return E_FAIL;
     }
 
-    // Save the image to a file
-    hr = DirectX::SaveToWICFile(
-        *scratchImage.GetImage(0, 0, 0),
-        DirectX::WIC_FLAGS_NONE,
-        GUID_ContainerFormatPng,
-        L"frames/frame.png"
-    );
+    // Save the texture
+    hr = DirectX::SaveWICTextureToFile(pContext, pTexture, GUID_ContainerFormatPng, filePath, &GUID_WICPixelFormat32bppBGRA);
+    if (FAILED(hr)) {
+        std::cout << "Saving failed!" << std::endl;
+    }
 
-    // Release resources
-    stagingTexture->Release();
+    // Clean up
     pContext->Release();
     pDevice->Release();
 
-    return SUCCEEDED(hr) ? 0 : 1;
+    return hr;
 }
+
+
+#define DUPL_FRAME_READY(FrameInfo) ((FrameInfo.TotalMetadataBufferSize > 0))
 
 // Set up everything necessary to call IDXGIOutput1::DuplicateOutput()
 int outputDuplicationExperiment() {
@@ -318,9 +297,10 @@ int outputDuplicationExperiment() {
         std::cout << "Failed to get adapter!" << hr << std::endl;
         return 1;
     }
-    // EnumOutputs returns an IDXGIOutput interface, and we need this to obtain
+
+    // EnumOutputs returns an IDXGIOutput interface, and this is needed to obtain
     // an IDXGIOutput1 interface, the "1" means that it supports output duplication
-    // through the DuplicateOutput method
+    // through the DuplicateOutput method.
     IDXGIOutput* pOutput = nullptr;
     hr = pAdapter->EnumOutputs(0, &pOutput);
     pAdapter->Release();
@@ -331,7 +311,7 @@ int outputDuplicationExperiment() {
     }
     
     // This is used to represent a single output destination, such as a monitor.
-    // Notice here we use 0 for the index, which grabs the first output.
+    // 0 is the index for the first output.
     // See the outputEnumerationExperiment function for a look at outputs.
     IDXGIOutput1* pOutput1 = nullptr;
     hr = pOutput->QueryInterface(__uuidof(IDXGIOutput1), reinterpret_cast<void**>(&pOutput1));
@@ -339,6 +319,7 @@ int outputDuplicationExperiment() {
     pOutput = nullptr;
     if (hr != S_OK) {
         std::cout << "Failed to query interface for IDXGIOutput1!" << std::endl;
+        return 1;
     }
 
     // This interface is specifically for the Desktop Duplication API, and
@@ -351,25 +332,31 @@ int outputDuplicationExperiment() {
         std::cout << "Failed to get output duplication!" << std::endl;
         return 1;
     }
-    // We no longer need these interfaces
-    pDevice->Release();
-    pDeviceContext->Release();
 
-    // Now it's time to grab a frame; let's start by declaring an IDXGIResource
-    // and an ID3D11Texture 2D to hold the image.
     IDXGIResource* pDesktopResource = nullptr;
     ID3D11Texture2D* pAcquiredDesktopImage = nullptr;
     DXGI_OUTDUPL_FRAME_INFO FrameInfo;
+    do {
+        pOutputDuplication->ReleaseFrame();
+        // The first argument is the timeout interval to wait for a frame
+        // to be ready. If it's 0, then the function will return immediately, but first
+        // if statement handles this case but just continuing to loop.
+        hr = pOutputDuplication->AcquireNextFrame(0, &FrameInfo, &pDesktopResource);
+        if (hr == DXGI_ERROR_WAIT_TIMEOUT) {
+            std::cout << "Timeout elapsed without acquiring a frame. Not necessarily an error.";
+        }
+        else if (hr == DXGI_ERROR_INVALID_CALL) {
+            std::cout << "Release previous frame before re-calling AcquireNextFrame" << std::endl;
+            return 1;
+        }
+        else if (hr != S_OK) {
+            std::cout << "There was an error acquiring a frame.";
+            return 1;
+        }
+        
+    } while (!DUPL_FRAME_READY(FrameInfo));
+    std::cout << "Frame Duplication Success!" << std::endl;
 
-    hr = pOutputDuplication->AcquireNextFrame(500, &FrameInfo, &pDesktopResource);
-    if (hr == DXGI_ERROR_WAIT_TIMEOUT) {
-        std::cout << "Timeout elapsed without acquiring a frame. Not necessarily an error.";
-        return 1;
-    }
-    else if (hr != S_OK) {
-        std::cout << "There was an error acquiring a frame.";
-        return 1;
-    }
     // The AcquireNextFrame function gave us two things: 1) a Frame Data struct, which
     // is only useful for the pointer position and 2) an IDXGIResource*. The latter
     // is a generic interface that can represent different types of resources,
@@ -382,18 +369,26 @@ int outputDuplicationExperiment() {
     pDesktopResource = nullptr;
     if (hr != S_OK) {
         std::cout << "Failed to query ID3D11Texture2D interface!" << std::endl;
+        return 1;
     }
 
-    
-    // Save the frame to a file
-    
+    // Save the frame to a file. It will save in the same directory
+    // as this cpp file.
+    std::cout << "Saving frame to file" << std::endl;
+    //// Save the texture
+    hr = DirectX::SaveWICTextureToFile(pDeviceContext, pAcquiredDesktopImage, GUID_ContainerFormatPng, L"frame2.png", &GUID_WICPixelFormat32bppBGRA);
+    if (FAILED(hr)) {
+        std::cout << "Saving failed!" << std::endl;
+    }
 
-    
+    // This function does the same as above, given a pointer
+    // to the desktop resource.
+    //saveTextureToPNG(pAcquiredDesktopImage, L"TestFrame.png");
 
-
-
-
-
+    pDevice->Release();
+    pDeviceContext->Release();
+    pAcquiredDesktopImage->Release();
+    pOutputDuplication->ReleaseFrame();
     pOutputDuplication->Release();
     return 0;
 }
@@ -485,6 +480,10 @@ int outputEnumerationExperiment() {
 // which experiment to run.
 int main(int argc, char* argv[])
 {
+    HRESULT hr = CoInitializeEx(nullptr, COINITBASE_MULTITHREADED);
+    if (FAILED(hr)) {
+        std::cout << "Failed to initialize COM" << std::endl;
+    }
     std::cout << "The amount of arguments is " << argc << std::endl;
     std::cout << "The argument received is " << *(argv[1]) << std::endl;
 
