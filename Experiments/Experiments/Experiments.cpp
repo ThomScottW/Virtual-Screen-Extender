@@ -8,6 +8,7 @@
 // Explore the output of IDXGIOutputDuplication::AcquireNextFrame
 // Explore the output of IDXGIOutputDuplication::GetFrameDirtyRects
 // Explore the output of IDXGIOutputDuplication::GetFrameMoveRects
+#define WIN32_LEAN_AND_MEAN
 
 #include <chrono>
 // Necessary includes for basic desktop duplication API
@@ -19,6 +20,11 @@
 // Include for saving an ID3D11Texture2D to a png on desktop
 #include <wincodec.h>
 #include <directxtk/ScreenGrab.h>
+// Includes for networking
+#pragma comment(lib, "Ws2_32.lib")
+#include <WinSock2.h>
+#include <Ws2tcpip.h>
+#include <tchar.h>
 
 // EnumAdapters1 needs an Adapter index as input (if you have a single
 // graphics card, the only valid index will be 0), and you pass it a 
@@ -226,9 +232,8 @@ HRESULT saveTextureToPNG(ID3D11Texture2D* pTexture, const wchar_t* filePath)
 
 #define DUPL_FRAME_READY(FrameInfo) ((FrameInfo.TotalMetadataBufferSize > 0))
 
-// Set up everything necessary to call IDXGIOutput1::DuplicateOutput()
+// Set up everything necessary to call IDXGIOutput1::DuplicateOutput()::AcquireNextFrame()
 int outputDuplicationExperiment() {
-    // Initialize DirectX
     HRESULT hr = S_OK;
 
     // Supported driver types
@@ -252,7 +257,8 @@ int outputDuplicationExperiment() {
             D3D_FEATURE_LEVEL_9_1
     };
     UINT numFeatureLevels = ARRAYSIZE(featureLevels);
-    // Here we create the D3D11 device. It's an interface for a virtual adapter
+    // The ID3D11Device is an interface for a virtual adapter. It allows 
+    // access to the GPU or a software adapter.
     ID3D11Device* pDevice = nullptr;
     ID3D11DeviceContext* pDeviceContext = nullptr;
     for (UINT driverTypeIndex = 0; driverTypeIndex < numDriverTypes; ++driverTypeIndex) {
@@ -476,6 +482,80 @@ int outputEnumerationExperiment() {
     return 0;
 }
 
+// Send a single number over a TCP connection
+int SimpleTCPExperiment() {
+    // This struct receives details about the windows socket implementation,
+    // as well as error codes
+    WSADATA wsaData;
+    int wsaErr;
+    // This makes the version of the Windows Socket specification, 2.2
+    WORD wVersionRequested = MAKEWORD(2, 2);
+    // This must be the first windows socket function that gets called. It
+    // loads the Winsock DLL which implements the Windows Socket API (WSA).
+    wsaErr = WSAStartup(wVersionRequested, &wsaData);
+    if (wsaErr != 0) {
+        std::cout << "WSAStartup failed!" << std::endl;
+        return 1;
+    }
+    std::cout << "WSAStartup successful!" << std::endl;
+    std::cout << "Status: " << wsaData.szSystemStatus << std::endl;
+
+    // Create socket for TCP. A socket is a pipe between two devices on a
+    // network, and allows dataflow in either direction.
+    SOCKET serverSocket = INVALID_SOCKET;
+    // AF_INET specifies the address family. In this case, IPv4.
+    // SOCK_STREAM and IPPROTO_TCP together specify type to be 
+    // for TCP connections
+    serverSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (serverSocket == INVALID_SOCKET) {
+        std::cout << "Failed to create socket. Error: " << WSAGetLastError() << std::endl;
+        WSACleanup();   // Free the DLL up
+        return 1;
+    }
+    std::cout << "Socket creation successful!" << std::endl;
+
+    // Bind ip address and port to socket
+    sockaddr_in service;
+    // Set the address family (AF) to AF_INET
+    service.sin_family = AF_INET;
+    // The first argument is the address family, like before.
+    // The second argument is a string for the IPv4 address we're trying
+    // to convert to numeric form. PtoN stands for text Presentation to Numeric.
+    InetPton(AF_INET, _T("127.0.0.1"), &service.sin_addr.s_addr);
+    int port = 55555;
+    service.sin_port = htons(port);  // Convert from host to network byte order
+    if (bind(serverSocket, (SOCKADDR*)&service, sizeof(service)) == SOCKET_ERROR) {
+        std::cout << "Failed to bind socket! Error: " << WSAGetLastError() << std::endl;
+        closesocket(serverSocket);
+        WSACleanup();
+        return 1;
+    }
+    std::cout << "Socket successfully bound!" << std::endl;
+    std::cout << "IP Address as Numeric decimal: " << ntohl(service.sin_addr.s_addr) << std::endl;
+    std::cout << "As hex: " << std::hex << ntohl(service.sin_addr.s_addr) << std::endl;
+
+    // Listen on socket
+    if (listen(serverSocket, 1) == SOCKET_ERROR) {
+        std::cout << "Failed to listen on socket! Error: " << WSAGetLastError() << std::endl;
+    }
+    std::cout << "Listening successful. Waiting for connections..." << std::endl;
+    SOCKET acceptSocket;
+    sockaddr connectingEntityAddress;
+    acceptSocket = accept(serverSocket, &connectingEntityAddress, NULL);
+    if (acceptSocket == INVALID_SOCKET) {
+        std::cout << "Failed to accept socket. Error: " << WSAGetLastError() << std::endl;
+        WSACleanup();
+        return 1;
+    }
+    std::cout << "Socket successfully accepted!" << std::endl;
+    return 0;
+}
+
+// Send an image over a UDP connection
+int ImageUDPExperiment() {
+    return 0;
+}
+
 
 // Usage:
 // Run with one command argument, which is a single number specifying
@@ -500,6 +580,9 @@ int main(int argc, char* argv[])
             outputDuplicationExperiment();
             break;
         case '4':
+            SimpleTCPExperiment();
+            break;
+        case '5':
             outputEnumerationExperiment();
             break;
     }
