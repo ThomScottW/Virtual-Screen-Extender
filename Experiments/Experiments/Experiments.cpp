@@ -9,6 +9,7 @@
 // Explore the output of IDXGIOutputDuplication::GetFrameDirtyRects
 // Explore the output of IDXGIOutputDuplication::GetFrameMoveRects
 #define WIN32_LEAN_AND_MEAN
+#define NOMINMAX  // To allow std::max() to work
 
 #include <chrono>
 // Necessary includes for basic desktop duplication API
@@ -25,6 +26,9 @@
 #include <WinSock2.h>
 #include <Ws2tcpip.h>
 #include <tchar.h>
+// For string conversions
+#include <string>
+#include <codecvt>
 
 // EnumAdapters1 needs an Adapter index as input (if you have a single
 // graphics card, the only valid index will be 0), and you pass it a 
@@ -482,7 +486,7 @@ int outputEnumerationExperiment() {
     return 0;
 }
 
-// Send a single number over a TCP connection
+// Send a message over a TCP connection
 int SimpleTCPExperiment() {
     // This struct receives details about the windows socket implementation,
     // as well as error codes
@@ -526,7 +530,6 @@ int SimpleTCPExperiment() {
     service.sin_port = htons(port);  // Convert from host to network byte order
     if (bind(serverSocket, (SOCKADDR*)&service, sizeof(service)) == SOCKET_ERROR) {
         std::cout << "Failed to bind socket! Error: " << WSAGetLastError() << std::endl;
-        closesocket(serverSocket);
         WSACleanup();
         return 1;
     }
@@ -539,21 +542,148 @@ int SimpleTCPExperiment() {
         std::cout << "Failed to listen on socket! Error: " << WSAGetLastError() << std::endl;
     }
     std::cout << "Listening successful. Waiting for connections..." << std::endl;
-    SOCKET acceptSocket;
+    SOCKET clientSocket;
     sockaddr connectingEntityAddress;
-    acceptSocket = accept(serverSocket, &connectingEntityAddress, NULL);
-    if (acceptSocket == INVALID_SOCKET) {
+    clientSocket = accept(serverSocket, &connectingEntityAddress, NULL);
+    if (clientSocket == INVALID_SOCKET) {
         std::cout << "Failed to accept socket. Error: " << WSAGetLastError() << std::endl;
         WSACleanup();
         return 1;
     }
     std::cout << "Socket successfully accepted!" << std::endl;
+
+    // Since a connection has been established with the client, it is now
+    // possible to send messages back and forth.
+    char receiveFromClientBuffer[200] = "";
+    int bytesReceived = recv(clientSocket, receiveFromClientBuffer, 200, 0);
+    if (bytesReceived < 0) {
+        std::cout << "Error receiving from client! Error: " << WSAGetLastError() << std::endl;
+        WSACleanup();
+        return 1;
+    }
+    std::cout << "Received \"" << receiveFromClientBuffer << "\" from the client." << std::endl;
+
+
+    char sendToClientBuffer[200] = "Server successfully received message from client";
+    int bytesSent = send(clientSocket, sendToClientBuffer, 200, 0);
+    if (bytesSent == SOCKET_ERROR) {
+        std::cout << "Server failed to send! Error: " << WSAGetLastError() << std::endl;
+        WSACleanup();
+        return 1;
+    }
+    std::cout << "Server sent " << bytesSent << " bytes." << std::endl;
+    return 0;
+}
+
+SOCKET setupTCPServer(_In_ const int portNumber, _In_ PCWSTR serverIPAddress) {
+    WSADATA wsaData;
+    int wsaErr;
+    WORD wVersionRequested = MAKEWORD(2, 2);
+    wsaErr = WSAStartup(wVersionRequested, &wsaData);
+    if (wsaErr != 0) {
+        std::cout << "WSAStartup failed!" << std::endl;
+        return INVALID_SOCKET;
+    }
+
+    SOCKET serverSocket = INVALID_SOCKET;
+    serverSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (serverSocket == INVALID_SOCKET) {
+        std::cout << "Failed to create socket. Error: " << WSAGetLastError() << std::endl;
+        WSACleanup();   // Free the DLL up
+        return INVALID_SOCKET;
+    }
+
+    sockaddr_in service;
+    service.sin_family = AF_INET;
+    InetPton(AF_INET, serverIPAddress, &service.sin_addr.s_addr);
+    service.sin_port = htons(portNumber);
+    if (bind(serverSocket, (SOCKADDR*)&service, sizeof(service)) == SOCKET_ERROR) {
+        std::cout << "Failed to bind socket! Error: " << WSAGetLastError() << std::endl;
+        WSACleanup();
+        return INVALID_SOCKET;
+    }
+
+    if (listen(serverSocket, 1) == SOCKET_ERROR) {
+        std::cout << "Failed to listen on socket! Error: " << WSAGetLastError() << std::endl;
+    }
+    std::cout << "Listening successful. Waiting for connections..." << std::endl;
+    SOCKET clientSocket;
+    sockaddr connectingEntityAddress;
+    clientSocket = accept(serverSocket, &connectingEntityAddress, NULL);
+    if (clientSocket == INVALID_SOCKET) {
+        std::cout << "Failed to accept socket. Error: " << WSAGetLastError() << std::endl;
+        WSACleanup();
+        return INVALID_SOCKET;
+    }
+    std::cout << "Socket successfully accepted!" << std::endl;
+    return clientSocket;
+}
+
+
+// A simple TCP server for sending and receiving messages until a halt
+// message is received from one end of the connection.
+int simpleTCPContinuousChatApp() {
+    SOCKET clientSocket;
+    if ((clientSocket = setupTCPServer(55555, L"127.0.0.1")) == INVALID_SOCKET) {
+        std::cout << "Failed to setup TCP Server!" << std::endl;
+    }
+
+    const int bufferSize = 500;
+    char receiveFromClientBuffer[bufferSize] = "";
+    char sendToClientBuffer[bufferSize] = "";
+    int bytesReceived;
+    int bytesSent;
+
+    while (strcmp(receiveFromClientBuffer, "DISCONNECT") != 0) {
+        bytesReceived = recv(clientSocket, receiveFromClientBuffer, bufferSize, 0);
+        if (bytesReceived < 0) {
+            std::cout << "Error receiving from client! Error: " << WSAGetLastError() << std::endl;
+            WSACleanup();
+            return 1;
+        }
+        std::cout << "Client: \"" << receiveFromClientBuffer << "\"" << std::endl;
+
+        std::cout << "Type what you would like to send to the client: ";
+        std::cin.getline(sendToClientBuffer, bufferSize);
+        if (std::cin.fail()) {
+            std::cin.clear();  // Clear the fail bit
+            // Discard characters until a newline is encountered
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        }
+        bytesSent = send(clientSocket, sendToClientBuffer, bufferSize, 0);
+        if (bytesSent == SOCKET_ERROR) {
+            std::cout << "Server failed to send! Error: " << WSAGetLastError() << std::endl;
+            WSACleanup();
+            return 1;
+        }
+    }
+    WSACleanup();
     return 0;
 }
 
 // Send an image over a UDP connection
 int ImageUDPExperiment() {
     return 0;
+}
+
+// A small example to show how to handle the case where cin.getline() receives
+// more characters than the buffer can hold. Without the calls to cin.clear()
+// and cin.ignore, this loop will break if a message longer than 10 characters
+// is sent. The null terminator is included in those 10 characters. So if 
+// "12345678910" is sent, all that will be printed out is "123456789".
+int cinExperiment() {
+    char buffer[10] = "";
+    
+    while (true) {
+        std::cout << "Type something: ";
+        std::cin.getline(buffer, 10);
+        if (std::cin.fail()) {
+            std::cin.clear();  // Clear the fail bit
+            // Discard characters until a newline is encountered
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+        }
+        std::cout << "You typed \"" << buffer << "\"" << std::endl;
+    }
 }
 
 
@@ -584,6 +714,12 @@ int main(int argc, char* argv[])
             break;
         case '5':
             outputEnumerationExperiment();
+            break;
+        case '6':
+            simpleTCPContinuousChatApp();
+            break;
+        case '7':
+            cinExperiment();
             break;
     }
     return 0;
